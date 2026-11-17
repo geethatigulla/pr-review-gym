@@ -1,0 +1,100 @@
+name: code-review-env
+version: "1.0.0"
+description: >-
+  RL environment where an agent reviews PR-style diffs and earns partial credit
+  for matching a hidden rubric of known defects (bugs, security, performance, logic, style).
+
+author: hackathon-team
+entry_point: server.app:app
+
+tags:
+  - openenv
+  - code-review
+  - software-engineering
+
+tasks:
+  - id: easy
+    name: easy
+    description: >-
+      Find obvious bugs in Python/JavaScript-style diffs (off-by-one, wrong variables,
+      missing returns, common footguns).
+  - id: medium
+    name: medium
+    description: >-
+      Identify security vulnerabilities (SQL injection, secrets, path traversal, XSS, SSRF, etc.).
+  - id: hard
+    name: hard
+    description: >-
+      Full code review: logic, security, performance, and style across larger multi-concern diffs.
+
+# Rubric field names (JSON-schema style summaries; canonical wire types are Pydantic models).
+observation_space:
+  type: object
+  properties:
+    task_name: { type: string, description: "easy | medium | hard (legacy aliases still accepted in reset)" }
+    diff: { type: string }
+    file_name: { type: string }
+    language: { type: string }
+    pr_title: { type: string }
+    pr_description: { type: string }
+    comments_so_far:
+      type: array
+      items: { type: object }
+    remaining_comments: { type: integer }
+    step_feedback: { type: ["string", "null"] }
+    truncated: { type: boolean }
+    reward: { type: ["number", "null"] }
+    done: { type: boolean }
+
+action_space:
+  type: object
+  properties:
+    review_comment:
+      type: ["object", "null"]
+      properties:
+        line_number: { type: integer }
+        comment: { type: string }
+        severity:
+          type: string
+          enum: [critical, major, minor, suggestion]
+        category:
+          type: string
+          enum: [bug, security, performance, style, logic]
+    done_reviewing: { type: boolean }
+
+# Wire-format rewards are mapped to the open interval (0, 1), not 0.0 or 1.0 endpoints.
+reward_range: [0.0, 1.0]
+
+# Back-compat aliases for older clients (prefer observation_space / action_space above).
+observation:
+  type: object
+  properties:
+    task_name: { type: string }
+    diff: { type: string }
+    file_name: { type: string }
+    language: { type: string }
+    pr_title: { type: string }
+    pr_description: { type: string }
+    comments_so_far:
+      type: array
+      items: { type: object }
+    remaining_comments: { type: integer }
+
+action:
+  type: object
+  properties:
+    line_number: { type: integer }
+    comment: { type: string }
+    severity:
+      type: string
+      enum: [critical, major, minor, suggestion]
+    category:
+      type: string
+      enum: [bug, security, performance, style, logic]
+    done_reviewing: { type: boolean }
+
+reward:
+  type: number
+  description: >-
+    Per-step delta clamped to [0,1] then mapped to (0,1) for OpenEnv validators;
+    terminal total_reward in state matches grader score in (0,1).
